@@ -151,5 +151,5 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 
 ## Acknowledgements
 
-- Built with the [Anthropic Claude API](https://docs.anthropic.com)
-- Model: `claude-sonnet-4-20250514`
+- Built By Madhusha Velpula
+  
