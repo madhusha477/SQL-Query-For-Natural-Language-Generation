@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SQL → Natural Language Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f5f5f4;
+      --bg-info: #e6f1fb;
+      --text: #1a1a18;
+      --text-secondary: #6b6b68;
+      --text-info: #185fa5;
+      --border: rgba(0,0,0,0.12);
+      --border-hover: rgba(0,0,0,0.25);
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --font-sans: system-ui, -apple-system, sans-serif;
+      --font-mono: 'Fira Mono', 'Menlo', 'Courier New', monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1a;
+        --bg-secondary: #2a2a27;
+        --bg-info: #042c53;
+        --text: #e8e8e4;
+        --text-secondary: #9a9a96;
+        --text-info: #85b7eb;
+        --border: rgba(255,255,255,0.12);
+        --border-hover: rgba(255,255,255,0.25);
+      }
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-secondary);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 2rem;
+      width: 100%;
+      max-width: 780px;
+    }
+
+    header { margin-bottom: 1.75rem; }
+    header h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; }
+    header p { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+    label {
+      display: block;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    input[type="text"],
+    select,
+    textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      padding: 8px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type="text"]:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--border-hover);
+    }
+
+    textarea { resize: vertical; line-height: 1.6; }
+    textarea.mono { font-family: var(--font-mono); font-size: 13px; }
+
+    .row { display: flex; gap: 12px; margin-bottom: 1rem; }
+    .col { flex: 1; min-width: 0; }
+    .field { margin-bottom: 1rem; }
+
+    .api-key-row { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 1rem; }
+    .api-key-row .col { flex: 1; }
+    .api-key-row button { white-space: nowrap; height: 36px; }
+
+    button {
+      background: transparent;
+      border: 0.5px solid var(--border-hover);
+      border-radius: var(--radius-md);
+      color: var(--text);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      padding: 8px 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.1s, transform 0.1s;
+    }
+    button:hover { background: var(--bg-secondary); }
+    button:active { transform: scale(0.98); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+      font-weight: 500;
+    }
+    .btn-primary:hover { opacity: 0.88; background: var(--text); }
+
+    .divider {
+      border: none;
+      border-top: 0.5px solid var(--border);
+      margin: 1.5rem 0;
+    }
+
+    .result-area {
+      background: var(--bg-secondary);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      margin-top: 1.25rem;
+      display: none;
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .badge {
+      background: var(--bg-info);
+      color: var(--text-info);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: var(--radius-md);
+    }
+
+    #resultText {
+      font-size: 15px;
+      line-height: 1.75;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+
+    .error {
+      color: #a32d2d;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    .spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--bg-secondary);
+      border-top-color: var(--bg);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    button.loading .spinner { display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+    footer {
+      margin-top: 2rem;
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-align: center;
+      line-height: 1.6;
+    }
+    footer a { color: var(--text-info); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>SQL → Natural Language Generator</h1>
+    <p>Paste any SQL query and get a plain-language explanation powered by Claude. Supports schema context, tone selection, and multiple SQL dialects.</p>
+  </header>
+
+  <!-- API Key -->
+  <div class="field">
+    <label for="apiKey">Anthropic API key</label>
+    <div class="api-key-row">
+      <div class="col">
+        <input type="text" id="apiKey" placeholder="sk-ant-..." autocomplete="off" />
+      </div>
+      <button onclick="toggleKey()">
+        <svg id="eyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        Show
+      </button>
+    </div>
+    <p class="hint">Your key is never stored — it stays in memory for this session only. Get one at <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a></p>
+  </div>
+
+  <hr class="divider" />
+
+  <!-- Options -->
+  <div class="row">
+    <div class="col">
+      <label for="tone">Output tone</label>
+      <select id="tone">
+        <option value="plain">Plain English</option>
+        <option value="business">Business summary</option>
+        <option value="technical">Technical description</option>
+        <option value="simple">Simple (non-technical)</option>
+      </select>
+    </div>
+    <div class="col">
+      <label for="dialect">SQL dialect</label>
+      <select id="dialect">
+        <option value="">Auto-detect</option>
+        <option value="PostgreSQL">PostgreSQL</option>
+        <option value="MySQL">MySQL</option>
+        <option value="SQLite">SQLite</option>
+        <option value="BigQuery">BigQuery</option>
+        <option value="SQL Server">SQL Server</option>
+        <option value="Oracle">Oracle</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Schema context -->
+  <div class="field">
+    <label for="schema">Schema context <span style="font-weight:400">(optional)</span></label>
+    <textarea id="schema" rows="3" placeholder="e.g. orders(id, customer_id, amount, created_at), customers(id, name, email)"></textarea>
+    <p class="hint">Providing table/column descriptions improves accuracy for ambiguous queries.</p>
+  </div>
+
+  <!-- SQL input -->
+  <div class="field">
+    <label for="sql">SQL query</label>
+    <textarea id="sql" class="mono" rows="8" placeholder="Paste your SQL query here...">SELECT c.name, SUM(o.amount) AS total_spent
+FROM customers c
+JOIN orders o ON c.id = o.customer_id
+WHERE o.created_at >= '2024-01-01'
+GROUP BY c.name
+ORDER BY total_spent DESC
+LIMIT 10;</textarea>
+  </div>
+
+  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+    <button class="btn-primary" id="runBtn" onclick="generate()">
+      ▶ Generate explanation
+      <span class="spinner" id="spinner"></span>
+    </button>
+    <button onclick="clearAll()">Clear</button>
+    <span class="error" id="errMsg"></span>
+  </div>
+
+  <!-- Result -->
+  <div class="result-area" id="resultArea">
+    <div class="result-header">
+      <span class="badge" id="toneBadge">Plain English</span>
+      <button onclick="copyResult()" title="Copy to clipboard">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+    </div>
+    <div id="resultText"></div>
+  </div>
+
+  <footer>
+    <p>Powered by the <a href="https://docs.anthropic.com" target="_blank" rel="noopener">Anthropic Claude API</a> · claude-sonnet-4-20250514</p>
+    <p style="margin-top:4px;">Your SQL is sent only to Anthropic's API and is not stored anywhere else.</p>
+  </footer>
+</div>
+
+<script>
+  let keyVisible = false;
+
+  function toggleKey() {
+    keyVisible = !keyVisible;
+    const el = document.getElementById('apiKey');
+    el.type = keyVisible ? 'text' : 'password';
+  }
+
+  async function generate() {
+    const apiKey = document.getElementById('apiKey').value.trim();
+    const sql = document.getElementById('sql').value.trim();
+    const schema = document.getElementById('schema').value.trim();
+    const tone = document.getElementById('tone').value;
+    const dialect = document.getElementById('dialect').value;
+    const btn = document.getElementById('runBtn');
+    const errMsg = document.getElementById('errMsg');
+    const resultArea = document.getElementById('resultArea');
+    const resultText = document.getElementById('resultText');
+    const toneBadge = document.getElementById('toneBadge');
+
+    errMsg.textContent = '';
+
+    if (!apiKey) { errMsg.textContent = 'Please enter your Anthropic API key.'; return; }
+    if (!sql) { errMsg.textContent = 'Please paste a SQL query first.'; return; }
+
+    btn.classList.add('loading');
+    btn.disabled = true;
+    resultArea.style.display = 'none';
+
+    const toneMap = {
+      plain: 'plain English, clear and concise',
+      business: 'a business-friendly summary for non-technical stakeholders',
+      technical: 'a technical description for software developers',
+      simple: 'very simple language for someone with no database background'
+    };
+    const toneLabel = { plain: 'Plain English', business: 'Business summary', technical: 'Technical', simple: 'Simple' };
+    toneBadge.textContent = toneLabel[tone];
+
+    let prompt = `Convert the following SQL query into ${toneMap[tone]}.
+Explain what data it retrieves, any filters applied, joins, grouping, sorting, and result limits.
+Be concise but complete. Do NOT repeat the SQL — only provide the natural language explanation.`;
+    if (dialect) prompt += `\n\nSQL dialect: ${dialect}`;
+    if (schema) prompt += `\n\nSchema context:\n${schema}`;
+    prompt += `\n\nSQL query:\n\`\`\`sql\n${sql}\n\`\`\``;
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+
+      const text = data.content.map(b => b.text || '').join('').trim();
+      resultText.textContent = text;
+      resultArea.style.display = 'block';
+    } catch (e) {
+      errMsg.textContent = 'Error: ' + e.message;
+    } finally {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+    }
+  }
+
+  function copyResult() {
+    const text = document.getElementById('resultText').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = event.currentTarget;
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✓ Copied';
+      setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    }).catch(() => {});
+  }
+
+  function clearAll() {
+    document.getElementById('sql').value = '';
+    document.getElementById('schema').value = '';
+    document.getElementById('resultArea').style.display = 'none';
+    document.getElementById('errMsg').textContent = '';
+  }
+
+  // Allow Ctrl/Cmd+Enter to run
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') generate();
+  });
+</script>
+</body>
+</html>
